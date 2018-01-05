@@ -88,6 +88,63 @@
   [(+ row row-offset)
    (+ col col-offset)])
 
+(def single-moves {:dl [-1 -1]
+                   :d  [-1  0]
+                   :dr [-1  1]
+                   :l  [ 0 -1]
+                   :r  [ 0  1]
+                   :ul [ 1 -1]
+                   :u  [ 1  0]
+                   :ur [ 1  1]})
+
+(defn extend-moves
+  "produces a continuous lazy seq of moves for a given direction from 1 to n times"
+  [n [row col]]
+  (map (fn [idx]
+         [(* idx row)
+          (* idx col)])
+       (range 1 (inc n))))
+
+(def white-king-piece {:piece :king
+                       :colour :white
+                       :moves (vals single-moves)})
+
+(def white-queen-piece {:piece :queen
+                        :colour :white
+                        :moves (mapcat (partial extend-moves 8)
+                                       (vals single-moves))})
+
+(defn make-L-move [move-twice move-once]
+  (let [m2 (single-moves move-twice)
+        m1 (single-moves move-once)]
+    (-> m2
+        (add-offset m2)
+        (add-offset m1))))
+
+(def knight-moves {:ur (make-L-move :u :r)
+                   :ru (make-L-move :r :u)
+                   :rd (make-L-move :r :d)
+                   :dr (make-L-move :d :r)
+                   :ul (make-L-move :u :l)
+                   :lu (make-L-move :l :u)
+                   :ld (make-L-move :l :d)
+                   :dl (make-L-move :d :l)})
+
+(defn out-of-bounds? [[row col]]
+  (or (> row 8) (> 0 row)
+      (> col 8) (> 0 col)))
+
+(defn blocked? [move]
+  false)
+
+(defn remove-disallowed-moves [board point]
+  (let [{:as piece
+         :keys [moves]} (get-piece board point)]
+    (->> moves
+         (map (partial add-offset point))
+         (remove out-of-bounds?)
+         (remove blocked?))))
+
 (defn translate
   "given a board a point and an translation, translates the piece by a given offset"
   [board origin translation]
@@ -101,4 +158,3 @@
   (-> board
       (calculate-all-positions point)
       (remove-disallowed-moves)))
-
