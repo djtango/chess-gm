@@ -88,14 +88,23 @@
   [(+ row row-offset)
    (+ col col-offset)])
 
-(def single-moves {:dl [-1 -1]
-                   :d  [-1  0]
-                   :dr [-1  1]
-                   :l  [ 0 -1]
-                   :r  [ 0  1]
-                   :ul [ 1 -1]
-                   :u  [ 1  0]
-                   :ur [ 1  1]})
+(def up-down-left-right
+  "Points for up down left right"
+  {:u  [ 1  0]
+   :d  [-1  0]
+   :l  [ 0 -1]
+   :r  [ 0  1]})
+
+(def four-diagonals
+  "Points for up-right down-right down-left up-left"
+  {:dl [-1 -1]
+   :dr [-1  1]
+   :ul [ 1 -1]
+   :ur [ 1  1]})
+
+(def all-directions
+  (merge up-down-left-right
+         four-diagonals))
 
 (defn extend-moves
   "produces a continuous lazy seq of moves for a given direction from 1 to n times"
@@ -105,18 +114,24 @@
           (* idx col)])
        (range 1 (inc n))))
 
+(defn directions->moves [directions n]
+  "helper for generating a set of moves from a set of directions. Moves are grouped by direction [[moves...] ...]"
+  (mapv (partial extend-moves n)
+        (vals directions)))
+
 (def white-king-piece {:piece :king
                        :colour :white
-                       :moves (vals single-moves)})
+                       :moves (directions->moves all-directions 1)})
+
+(def black-king-piece (update white-king-piece :colour :black))
 
 (def white-queen-piece {:piece :queen
                         :colour :white
-                        :moves (mapcat (partial extend-moves 8)
-                                       (vals single-moves))})
+                        :moves (directions->moves all-directions 8)})
 
 (defn make-L-move [move-twice move-once]
-  (let [m2 (single-moves move-twice)
-        m1 (single-moves move-once)]
+  (let [m2 (all-directions move-twice)
+        m1 (all-directions move-once)]
     (-> m2
         (add-offset m2)
         (add-offset m1))))
@@ -134,27 +149,51 @@
   (or (> row 8) (> 0 row)
       (> col 8) (> 0 col)))
 
-(defn blocked? [move]
-  false)
+(defn- find-first-piece [board line-of-points]
+  "Returns index of either the first piece or the end of the sequence"
+  (->> line-of-points
+       (map (partial get-piece board))
+       (take-while nil?)
+       count))
+
+(defn- same-colour? [{colour-a :colour} {colour-b :colour}]
+  (= colour-a colour-b))
+
+(defn blocked? [board [current-point & points-in-a-line]]
+  (let [end-of-line (find-first-piece board points-in-a-line)
+        unobstructed-line-and-maybe-piece (take end-of-line points-in-a-line)
+        last-allowed-point (get points-in-a-line end-of-line)
+        maybe-first-piece (find-piece board last-allowed-point)]
+    (if (and maybe-first-piece
+             (same-colour? (find-piece board current-point) maybe-first-piece))
+      (drop-last unobstructed-line-and-maybe-piece)
+      unobstructed-line-and-maybe-piece)))
+
+(defn map-2d [coll-fn element-fn coll]
+  "Applies a collection function onto a nested-collection, passing element-fn to the coll-fn"
+  (map (fn [nested-coll] (coll-fn element-fn nested-coll))
+       coll))
 
 (defn remove-disallowed-moves [board point]
   (let [{:as piece
-         :keys [moves]} (get-piece board point)]
+         :keys [moves]} (get-piece board point)
+        moves->final-position (partial add-offset point)
+        append-current-position (partial concat [point])]
     (->> moves
-         (map (partial add-offset point))
-         (remove out-of-bounds?)
-         (remove blocked?))))
+         (map-2d map moves->final-position)
+         (map append-current-position)
+         (map-2d remove out-of-bounds?)
+         (mapcat (partial blocked? board)))))
 
 (defn translate
   "given a board a point and an translation, translates the piece by a given offset"
   [board origin translation]
-  (let [target (add-offset origin translation)
+  (let [final-position (add-offset origin translation)
         piece (get-piece board origin)]
     (-> board
         (update-board origin nil)
-        (update-board target piece))))
+        (update-board final-position piece))))
 
 (defn get-moves [board point]
   (-> board
-      (calculate-all-positions point)
-      (remove-disallowed-moves)))
+      (remove-disallowed-moves point)))

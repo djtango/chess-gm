@@ -37,3 +37,42 @@
                  (sut/translate [1 1] [-1 -1]))
              board-2x2)
           "Translate should handle negative translations"))))
+
+(deftest remove-disallowed-moves
+  (testing "For a 2x2 board:"
+    (let [wk sut/white-king-piece
+          bk sut/black-king-piece
+          wq sut/white-queen-piece
+          board-2x2 [[wk  nil],
+                     [nil nil]]
+          origin [0 0]]
+      (testing "moves to out of bounds should be removed"
+        (let [allowed-moves (sut/remove-disallowed-moves board-2x2 origin)]
+          (is (= #{[0 1] [1 1] [1 0]}
+                 (set allowed-moves)))))
+      (testing "moves blocked by piece of same colour:"
+        (testing "horizontally blocked moves should be removed"
+          (let [blocked-horizontally [[wk  wq]
+                                      [nil nil]]
+                allowed-moves (sut/remove-disallowed-moves blocked-horizontally origin)]
+            (is (= #{[1 1] [1 0]}
+                   (set allowed-moves)))))
+        (testing "vertically blocked moves should be removed"
+          (let [blocked-vertically [[wk nil]
+                                    [wq nil]]
+                allowed-moves (sut/remove-disallowed-moves blocked-vertically origin)]
+            (is (= #{[0 1] [1 1]}
+                   (set allowed-moves))))))
+      (testing "moves blocked by piece of opposite colour:"
+        (testing "horizontal blocked moves should be allowed"
+          (let [blocked-horizontally [[wk  bk]
+                                      [nil nil]]
+                allowed-moves (sut/remove-disallowed-moves blocked-horizontally origin)]
+            (is (= #{[1 1] [1 0]}
+                   (set allowed-moves)))))
+        (testing "vertically blocked moves should be allowed"
+          (let [blocked-vertically [[wk nil]
+                                    [bk nil]]
+                allowed-moves (sut/remove-disallowed-moves blocked-vertically origin)]
+            (is (= #{[0 1] [1 1]}
+                   (set allowed-moves)))))))))
