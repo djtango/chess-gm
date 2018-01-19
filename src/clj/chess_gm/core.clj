@@ -78,7 +78,7 @@
        print-rows)
     (println linebr)))
 
-(defn- update-board [board point value]
+(defn update-board [board point value]
   (assoc-in board point value))
 
 (defn- get-piece [board point]
@@ -106,13 +106,14 @@
   (merge up-down-left-right
          four-diagonals))
 
+(defn multiply-direction [direction x]
+  (mapv (partial * x) direction))
+
 (defn extend-moves
   "produces a continuous lazy seq of moves for a given direction from 1 to n times"
-  [n [row col]]
-  (map (fn [idx]
-         [(* idx row)
-          (* idx col)])
-       (range 1 (inc n))))
+  [n direction]
+  (mapv (partial multiply-direction direction)
+        (range 1 (inc n))))
 
 (defn directions->moves [directions n]
   "helper for generating a set of moves from a set of directions. Moves are grouped by direction [[moves...] ...]"
@@ -128,6 +129,15 @@
 (def white-queen-piece {:piece :queen
                         :colour :white
                         :moves (directions->moves all-directions 8)})
+
+(def white-pawn-piece {:piece :pawn
+                       :colour :white
+                       :moves (directions->moves (select-keys up-down-left-right [:u]) 1)})
+
+(def black-pawn-piece {:piece :pawn
+                       :colour :black
+                       :moves (directions->moves (select-keys up-down-left-right [:d]) 1)})
+
 
 (defn make-L-move [move-twice move-once]
   (let [m2 (all-directions move-twice)
@@ -174,7 +184,7 @@
   (map (fn [nested-coll] (coll-fn element-fn nested-coll))
        coll))
 
-(defn remove-disallowed-moves [board point]
+(defn remove-disallowed-moves [{:as state :keys [board]} point]
   (let [{:as piece
          :keys [moves]} (get-piece board point)
         moves->final-position (partial add-offset point)
@@ -185,6 +195,116 @@
          (map-2d remove out-of-bounds?)
          (mapcat (partial blocked? board)))))
 
+(defn add-diagonal-pawn-takes [board point allowed-moves]
+  (let [pawn (get-piece board point)
+        [row col]   (-> pawn :moves first first)]
+    (->> [[row -1]
+          [row  1]]
+        (map (partial add-offset point))
+        (filter (fn piece-to-take? [move]
+                  (let [target-piece (get-piece board move)]
+                    (and target-piece
+                         (not (same-colour? pawn target-piece))))))
+        (concat allowed-moves))))
+
+(defn- add-pawn-first-move [board point allowed-moves]
+  (let [pawn (get-piece board point)
+        [pawn-row pawn-col] point
+        [row col]   (-> pawn :moves first first)
+        two-steps-forward [(* row 2)
+                           col]
+        in-starting-row? (or (and (= pawn-row 1)
+                                  (= :white (:colour pawn)))
+                             (and (= pawn-row 6)
+                                  (= :black (:colour pawn))))]
+    (if (and in-starting-row?
+             (nil? (get-piece board two-steps-forward)))
+      (concat allowed-moves
+              [(add-offset point two-steps-forward)])
+      allowed-moves)))
+
+(defn- get-en-passant-position [{:as state :keys [board history]}]
+  (let [[from to] (peek history)
+        [_ to-col] to]
+    (->> to
+         (get-piece board)
+         :moves
+         first ;; get the opponent-pawn direction
+         first
+         (add-offset from)))) ;; move one step in opponent direction
+
+(defn- last-move-pawn-double-step? [{:as state :keys [board history]}]
+  (let [[from to] (peek history)
+        piece (get-piece board to)
+        [from-row _] from
+        [to-row _] to]
+    (and (= :pawn (:piece piece))
+         (= 2 (Math/abs (- to-row from-row))))))
+
+(defn add-en-passant [{:as state :keys [board]} point allowed-moves]
+  (if (last-move-pawn-double-step? state)
+    (conj allowed-moves (get-en-passant-position state))
+    allowed-moves))
+
+(defn add-pawn-moves [{:as state :keys [board]} point allowed-moves]
+  (let [pawn (get-piece board point)
+        [row col]   (-> pawn :moves first)]
+    (->> allowed-moves
+         (add-diagonal-pawn-takes board point)
+         (add-pawn-first-move board point)
+         (add-en-passant state point)
+         )))
+
+(def starting-rows
+  {:white 0
+   :black 7})
+
+(defn never-moved? [{:as state :keys [board history]} colour]
+  (let [starting-row (starting-rows colour)
+        king-starting-position [starting-row 4]
+        rook-left-starting-position [starting-row 0]
+        rook-right-starting-position [starting-row 7]]
+    (empty? (filter (fn [[from _]]
+                      (or (= from king-starting-position)
+                          (= from rook-left-starting-position)
+                          (= from rook-right-starting-position)))
+                    history))))
+
+(defn clear-path-for-castling? [board colour direction]
+  (let [king-position [(starting-rows colour)
+                       4]]
+    (->> direction
+         (extend-moves 8)
+         (map (partial add-offset king-position))
+         (remove out-of-bounds?)
+         butlast ;; remove rook
+         (map (partial get-piece board))
+         (remove nil?)
+         empty?)))
+
+(defn check-for-castling [board colour direction allowed-moves]
+  (if (clear-path-for-castling? board colour direction)
+    (conj allowed-moves [(starting-rows colour)
+                         (multiply-direction direction 2)])))
+
+(defn- add-castling [{:as state :keys [board history]} point allowed-moves]
+  (let [{:keys [piece colour]} (get-piece board point)]
+    (if (and (= :king piece)
+             (never-moved? state colour))
+      (->> allowed-moves
+           (check-for-castling board colour (up-down-left-right :l))
+           (check-for-castling board colour (up-down-left-right :r)))
+      allowed-moves)))
+
+(defn add-king-moves [state point allowed-moves]
+  (add-castling state point allowed-moves))
+
+(defn handle-special-moves [{:as state :keys [board]} point allowed-moves]
+  (case (->> point (get-piece board) :piece)
+    :pawn (add-pawn-moves state point allowed-moves)
+    :king (add-king-moves state point allowed-moves)
+    allowed-moves))
+
 (defn translate
   "given a board a point and an translation, translates the piece by a given offset"
   [board origin translation]
@@ -194,6 +314,6 @@
         (update-board origin nil)
         (update-board final-position piece))))
 
-(defn get-moves [board point]
-  (-> board
+(defn get-moves [state point]
+  (-> state
       (remove-disallowed-moves point)))
