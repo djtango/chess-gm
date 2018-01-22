@@ -115,3 +115,49 @@
                                                    new-allowed-moves)]
           (is (= #{[5 0] [5 1]}
                  (set added-en-passant))))))))
+
+(deftest add-king-moves
+  (testing "For a 8x8 board:"
+    (let [wk sut/white-king-piece
+          king-starting-position [0 4]
+          wr sut/white-rook-piece
+          rook-left-starting-position [0 0]
+          rook-right-starting-position [0 7]
+          board (-> (sut/new-board)
+                    (sut/update-board king-starting-position wk)
+                    (sut/update-board rook-left-starting-position wr)
+                    (sut/update-board rook-right-starting-position wr))
+          allowed-moves [[0 5]
+                         [1 4]
+                         [0 3]
+                         [1 5]
+                         [1 3]]]
+      (testing "Adding Castling:"
+        (testing "When king has not moved, rooks have not moved and line is unobstructed:"
+          (let [added-castling (sut/add-king-moves {:board board :history []}
+                                                   king-starting-position
+                                                   allowed-moves)]
+            (testing "should add left castling"
+              (is (contains? (set added-castling) [0 2])))
+            (testing "should add right castling"
+              (is (contains? (set added-castling) [0 6])))))
+        (testing "When king has moved away and back to starting position"
+          (let [move-king-right-then-left [[[0 4] [0 5]]
+                                           [[0 5] [0 4]]]
+                added-castling (sut/add-king-moves {:board board
+                                                    :history move-king-right-then-left}
+                                                   king-starting-position
+                                                   allowed-moves)]
+            (testing "should add no additional moves"
+              (is (= allowed-moves added-castling)))))
+        (testing "When a rook has moved away and back to starting position:"
+          (let [move-rook-left-then-right [[[0 7] [0 6]]
+                                           [[0 6] [0 7]]]
+                added-castling (sut/add-king-moves {:board board
+                                                    :history move-rook-left-then-right}
+                                                   king-starting-position
+                                                   allowed-moves)]
+            (testing "should be able to castle left"
+              (is (contains? (set added-castling) [0 2])))
+            (testing "should not be able to castle right"
+              (is (not (contains? (set added-castling) [0 6]))))))))))

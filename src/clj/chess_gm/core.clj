@@ -138,6 +138,9 @@
                        :colour :black
                        :moves (directions->moves (select-keys up-down-left-right [:d]) 1)})
 
+(def white-rook-piece {:piece :rook
+                       :colour :white
+                       :moves (directions->moves up-down-left-right 8)})
 
 (defn make-L-move [move-twice move-once]
   (let [m2 (all-directions move-twice)
@@ -156,8 +159,8 @@
                    :dl (make-L-move :d :l)})
 
 (defn out-of-bounds? [[row col]]
-  (or (> row 8) (> 0 row)
-      (> col 8) (> 0 col)))
+  (or (> row 7) (> 0 row)
+      (> col 7) (> 0 col)))
 
 (defn- find-first-piece [board line-of-points]
   "Returns index of either the first piece or the end of the sequence"
@@ -252,48 +255,57 @@
     (->> allowed-moves
          (add-diagonal-pawn-takes board point)
          (add-pawn-first-move board point)
-         (add-en-passant state point)
-         )))
+         (add-en-passant state point))))
 
 (def starting-rows
   {:white 0
    :black 7})
 
-(defn never-moved? [{:as state :keys [board history]} colour]
+(def starting-columns
+  {:king 4
+   :left-rook 0
+   :right-rook 7})
+
+(defn never-moved? [{:as state :keys [board history]} colour piece]
   (let [starting-row (starting-rows colour)
-        king-starting-position [starting-row 4]
-        rook-left-starting-position [starting-row 0]
-        rook-right-starting-position [starting-row 7]]
+        starting-column (starting-columns piece)]
     (empty? (filter (fn [[from _]]
-                      (or (= from king-starting-position)
-                          (= from rook-left-starting-position)
-                          (= from rook-right-starting-position)))
+                      (= from [starting-row starting-column]))
                     history))))
 
 (defn clear-path-for-castling? [board colour direction]
   (let [king-position [(starting-rows colour)
-                       4]]
+                       4]
+        dbg (fn [x] (println x) x)
+        ]
     (->> direction
          (extend-moves 8)
          (map (partial add-offset king-position))
          (remove out-of-bounds?)
-         butlast ;; remove rook
+         butlast ;; remove rook position
          (map (partial get-piece board))
          (remove nil?)
          empty?)))
 
-(defn check-for-castling [board colour direction allowed-moves]
-  (if (clear-path-for-castling? board colour direction)
-    (conj allowed-moves [(starting-rows colour)
-                         (multiply-direction direction 2)])))
+(defn check-for-castling [{:as state :keys [board history]} colour direction allowed-moves]
+  (if (and (never-moved? state colour (get {[0  1] :right-rook
+                                            [0 -1] :left-rook}
+                                           direction))
+           (clear-path-for-castling? board colour direction))
+    (let [king-position [(starting-rows colour) 4]
+          two-steps-from-king-to-rook (add-offset king-position
+                                                  (multiply-direction direction 2))]
+      (conj allowed-moves
+            two-steps-from-king-to-rook))
+    allowed-moves))
 
 (defn- add-castling [{:as state :keys [board history]} point allowed-moves]
   (let [{:keys [piece colour]} (get-piece board point)]
     (if (and (= :king piece)
-             (never-moved? state colour))
+             (never-moved? state colour :king))
       (->> allowed-moves
-           (check-for-castling board colour (up-down-left-right :l))
-           (check-for-castling board colour (up-down-left-right :r)))
+           (check-for-castling state colour (up-down-left-right :l))
+           (check-for-castling state colour (up-down-left-right :r)))
       allowed-moves)))
 
 (defn add-king-moves [state point allowed-moves]
