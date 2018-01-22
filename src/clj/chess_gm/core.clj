@@ -275,9 +275,7 @@
 
 (defn clear-path-for-castling? [board colour direction]
   (let [king-position [(starting-rows colour)
-                       4]
-        dbg (fn [x] (println x) x)
-        ]
+                       4]]
     (->> direction
          (extend-moves 8)
          (map (partial add-offset king-position))
@@ -287,25 +285,25 @@
          (remove nil?)
          empty?)))
 
-(defn check-for-castling [{:as state :keys [board history]} colour direction allowed-moves]
-  (if (and (never-moved? state colour (get {[0  1] :right-rook
-                                            [0 -1] :left-rook}
-                                           direction))
-           (clear-path-for-castling? board colour direction))
-    (let [king-position [(starting-rows colour) 4]
-          two-steps-from-king-to-rook (add-offset king-position
-                                                  (multiply-direction direction 2))]
-      (conj allowed-moves
-            two-steps-from-king-to-rook))
-    allowed-moves))
+(defn check-for-castling [{:as state :keys [board history]} colour direction-key allowed-moves]
+  (let [direction (up-down-left-right direction-key)
+        piece (get {:l :left-rook :r :right-rook} direction-key)]
+    (if (and (never-moved? state colour piece)
+             (clear-path-for-castling? board colour direction))
+      (let [king-position [(starting-rows colour) 4]
+            two-steps-from-king-to-rook (add-offset king-position
+                                                    (multiply-direction direction 2))]
+        (conj allowed-moves
+              two-steps-from-king-to-rook))
+      allowed-moves)))
 
 (defn- add-castling [{:as state :keys [board history]} point allowed-moves]
   (let [{:keys [piece colour]} (get-piece board point)]
     (if (and (= :king piece)
              (never-moved? state colour :king))
       (->> allowed-moves
-           (check-for-castling state colour (up-down-left-right :l))
-           (check-for-castling state colour (up-down-left-right :r)))
+           (check-for-castling state colour :l)
+           (check-for-castling state colour :r))
       allowed-moves)))
 
 (defn add-king-moves [state point allowed-moves]
