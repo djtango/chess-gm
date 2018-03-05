@@ -161,3 +161,22 @@
               (is (contains? (set added-castling) [0 2])))
             (testing "should not be able to castle right"
               (is (not (contains? (set added-castling) [0 6]))))))))))
+
+(deftest make-move
+  (testing "for a simple move:"
+    (let [wk sut/white-king-piece
+          state {:board [[wk nil]
+                         [nil nil]]}
+          result (sut/make-move state [[0 0] [0 1]])]
+      (testing "make-move should move a piece to its new location"
+        (let [new-board (:board result)]
+          (is (= [[nil wk]
+                  [nil nil]]
+                 new-board))))))
+  (testing "for an illegal move:"
+    (let [wk sut/white-king-piece
+          state {:board [[wk nil]
+                         [nil nil]]}
+          result (sut/make-move state [[0 0] [0 0]])]
+      (testing "make-move should return nil"
+        (is (nil? result))))))

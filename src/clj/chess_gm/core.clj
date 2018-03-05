@@ -327,3 +327,17 @@
 (defn get-moves [state point]
   (-> state
       (remove-disallowed-moves point)))
+
+(defn allowed? [state move]
+  (let [[from to] move]
+    (contains? (set (get-moves state from))
+               to)))
+
+(defn make-move [state move]
+  (let [[from to] move]
+    (if (allowed? state move)
+      (update state
+              :board
+              translate
+              from
+              to))))
