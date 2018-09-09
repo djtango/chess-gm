@@ -1,4 +1,5 @@
-(ns chess-gm.core)
+(ns chess-gm.core
+  (:require [clojure.spec.alpha :as s]))
 
 (def white-king   \u2654)
 (def white-queen  \u2655)
@@ -12,6 +13,21 @@
 (def black-bishop \u265D)
 (def black-knight \u265E)
 (def black-pawn   \u265F)
+
+(def glyphs
+  {:black {:king   \u265A
+           :queen  \u265B
+           :rook   \u265C
+           :bishop \u265D
+           :knight \u265E
+           :pawn   \u265F}
+   :white {:king   \u2654
+           :queen  \u2655
+           :rook   \u2656
+           :bishop \u2657
+           :knight \u2658
+           :pawn   \u2659}
+   :moves {:marker \u2610}})
 
 (defn new-board
   "Function for creating a blank 8x8 board"
@@ -61,8 +77,8 @@
     board))
 
 (defn print-board [board]
-  (let [black (fn [i] (str "| " (or i ".") ))
-        white (fn [i] (str "| " (or i " ") ))
+  (let [black-tile (fn [i] (str "| " (or i ".") ))
+        white-tile (fn [i] (str "| " (or i " ") ))
         linebr (apply str (take 33 (repeat "-")))
         print-rows (fn [rows]
                      (doseq [r rows]
@@ -72,11 +88,50 @@
          reverse
          (map-board
            (fn [col-idx row-idx item]
-             (if (odd? (+ row-idx col-idx))
-               (white item)
-               (black item))))
+             (if (odd? (+ row-idx col-idx)) ;; this yields a checkerboard pattern
+               (white-tile item)
+               (black-tile item))))
        print-rows)
     (println linebr)))
+
+(defn render-tile [empty-tile-marker point]
+  (let [piece (:piece point)
+        colour (:colour point)
+        glyph (get-in glyphs [colour piece])]
+    (str "| " (or glyph empty-tile-marker) )))
+
+(defn visualize-board [{:as state :keys [board]}]
+  (let [black-tile (partial render-tile ".")
+        white-tile (partial render-tile " ")
+        linebr (apply str (take 33 (repeat "-")))
+        print-rows (fn [rows]
+                     (doseq [r rows]
+                       (println linebr)
+                       (apply println (concat r ["| "]))))]
+    (->> board
+         reverse
+         (map-board
+           (fn [col-idx row-idx item]
+             (if (odd? (+ row-idx col-idx)) ;; this yields a checkerboard pattern
+               (white-tile item)
+               (black-tile item))))
+         print-rows)
+    (println linebr)))
+
+(defn see-available-moves [state point]
+  (let [moves (get-moves state point)]
+    (-> state
+        (update
+          :board
+          (fn [board]
+            (reduce (fn [acc to]
+                      (assoc-in acc
+                                to
+                                {:piece :marker
+                                 :colour :moves}))
+                    board
+                    moves)))
+        visualize-board)))
 
 (defn update-board [board point value]
   (assoc-in board point value))
@@ -120,28 +175,6 @@
   (mapv (partial extend-moves n)
         (vals directions)))
 
-(def white-king-piece {:piece :king
-                       :colour :white
-                       :moves (directions->moves all-directions 1)})
-
-(def black-king-piece (update white-king-piece :colour :black))
-
-(def white-queen-piece {:piece :queen
-                        :colour :white
-                        :moves (directions->moves all-directions 8)})
-
-(def white-pawn-piece {:piece :pawn
-                       :colour :white
-                       :moves (directions->moves (select-keys up-down-left-right [:u]) 1)})
-
-(def black-pawn-piece {:piece :pawn
-                       :colour :black
-                       :moves (directions->moves (select-keys up-down-left-right [:d]) 1)})
-
-(def white-rook-piece {:piece :rook
-                       :colour :white
-                       :moves (directions->moves up-down-left-right 8)})
-
 (defn make-L-move [move-twice move-once]
   (let [m2 (all-directions move-twice)
         m1 (all-directions move-once)]
@@ -158,6 +191,77 @@
                    :ld (make-L-move :l :d)
                    :dl (make-L-move :d :l)})
 
+
+(defn- ->black [piece]
+  (assoc piece :colour :black))
+
+(def white-king-piece {:piece :king
+                       :colour :white
+                       :moves (directions->moves all-directions 1)})
+
+(def white-queen-piece {:piece :queen
+                        :colour :white
+                        :moves (directions->moves all-directions 8)})
+
+(def white-rook-piece {:piece :rook
+                       :colour :white
+                       :moves (directions->moves up-down-left-right 8)})
+
+(def white-bishop-piece {:piece :bishop
+                         :colour :white
+                         :moves (directions->moves four-diagonals 8)})
+
+(def white-knight-piece {:piece :knight
+                         :colour :white
+                         :moves knight-moves})
+
+(def white-pawn-piece {:piece :pawn
+                       :colour :white
+                       :moves (directions->moves (select-keys up-down-left-right [:u]) 1)})
+
+(def black-king-piece (->black white-king-piece))
+(def black-queen-piece (->black white-queen-piece))
+(def black-rook-piece (->black white-rook-piece))
+(def black-bishop-piece (->black white-bishop-piece))
+(def black-knight-piece (->black white-knight-piece))
+
+;; black pawns can only go in the opposite direction of a white pawn...
+(def black-pawn-piece {:piece :pawn
+                       :colour :black
+                       :moves (directions->moves (select-keys up-down-left-right [:d]) 1)})
+
+(defn starting-board
+  []
+  (let [row-of (fn [thing] (vec (take 8 (repeat thing))))
+        empty-row (row-of nil)]
+    [[white-rook-piece
+      white-knight-piece
+      white-bishop-piece
+      white-queen-piece
+      white-king-piece
+      white-bishop-piece
+      white-knight-piece
+      white-rook-piece]
+     (row-of white-pawn-piece)
+     empty-row
+     empty-row
+     empty-row
+     empty-row
+     (row-of black-pawn-piece)
+     [black-rook-piece
+      black-knight-piece
+      black-bishop-piece
+      black-queen-piece
+      black-king-piece
+      black-bishop-piece
+      black-knight-piece
+      black-rook-piece]]))
+
+(defn starting-state
+  []
+  {:board (starting-board)
+   :history []})
+
 (defn out-of-bounds? [[row col]]
   (or (> row 7) (> 0 row)
       (> col 7) (> 0 col)))
@@ -172,31 +276,49 @@
 (defn- same-colour? [{colour-a :colour} {colour-b :colour}]
   (= colour-a colour-b))
 
-(defn blocked? [board [current-point & points-in-a-line]]
+(defn remove-blocked-moves [board [current-point & points-in-a-line]]
   (let [end-of-line (find-first-piece board points-in-a-line)
-        unobstructed-line-and-maybe-piece (take end-of-line points-in-a-line)
-        last-allowed-point (get points-in-a-line end-of-line)
+        unobstructed-line-and-maybe-piece (take (inc end-of-line) points-in-a-line)
+        last-allowed-point (get (vec points-in-a-line) end-of-line)
         maybe-first-piece (find-piece board last-allowed-point)]
     (if (and maybe-first-piece
              (same-colour? (find-piece board current-point) maybe-first-piece))
       (drop-last unobstructed-line-and-maybe-piece)
       unobstructed-line-and-maybe-piece)))
 
+;; alternative impl
+;; (defn remove-blocked-moves [board [current-point & points-in-a-line]]
+;;   (let [clear-path (take-while (comp nil? (partial get-piece board)) points-in-a-line)
+;;         next-point (get (vec points-in-a-line)
+;;                         (count clear-path))]
+;;     (if-let [next-piece (get-piece board next-point)]
+;;       (if (same-colour? next-piece
+;;                         (get-piece board current-point))
+;;         clear-path
+;;         (if next-point
+;;           (conj (vec clear-path)
+;;                 next-point)
+;;           clear-path))
+;;       clear-path)))
+
 (defn map-2d [coll-fn element-fn coll]
   "Applies a collection function onto a nested-collection, passing element-fn to the coll-fn"
   (map (fn [nested-coll] (coll-fn element-fn nested-coll))
        coll))
 
-(defn remove-disallowed-moves [{:as state :keys [board]} point]
+(defn find-all-simple-moves [{:as state :keys [board]} point]
   (let [{:as piece
          :keys [moves]} (get-piece board point)
         moves->final-position (partial add-offset point)
         append-current-position (partial concat [point])]
     (->> moves
          (map-2d map moves->final-position)
-         (map append-current-position)
-         (map-2d remove out-of-bounds?)
-         (mapcat (partial blocked? board)))))
+         (map append-current-position))))
+
+(defn remove-disallowed-moves [{:as state :keys [board]} simple-moves]
+  (->> simple-moves
+       (map-2d remove out-of-bounds?)
+       (mapcat (partial remove-blocked-moves board))))
 
 (defn add-diagonal-pawn-takes [board point allowed-moves]
   (let [pawn (get-piece board point)
@@ -317,16 +439,25 @@
 
 (defn translate
   "given a board a point and an translation, translates the piece by a given offset"
-  [board origin translation]
-  (let [final-position (add-offset origin translation)
+  [board origin final-position]
+  (let [;;final-position ;;(add-offset origin translation)
         piece (get-piece board origin)]
     (-> board
         (update-board origin nil)
         (update-board final-position piece))))
 
+(s/def ::point (s/cat :row (s/int-in 0 8)
+                           :col (s/int-in 0 8)))
+(s/def ::move (s/cat :from ::point
+                         :to ::point))
+(s/def ::history (s/coll-of ::move))
+(s/def ::state (s/keys :req-un [::board ::history]))
+
 (defn get-moves [state point]
-  (-> state
-      (remove-disallowed-moves point)))
+  (->> (find-all-simple-moves state point)
+       (remove-disallowed-moves state)
+       (handle-special-moves state point)
+       ))
 
 (defn allowed? [state move]
   (let [[from to] move]
@@ -340,4 +471,5 @@
               :board
               translate
               from
-              to))))
+              to)
+      :error)))
