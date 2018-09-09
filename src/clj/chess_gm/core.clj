@@ -27,7 +27,8 @@
            :bishop \u2657
            :knight \u2658
            :pawn   \u2659}
-   :moves {:marker \u2610}})
+   :moves {:marker \u2610
+           :take-piece \u2612}})
 
 (defn new-board
   "Function for creating a blank 8x8 board"
@@ -119,7 +120,13 @@
     (println linebr)))
 
 (defn see-available-moves [state point]
-  (let [moves (get-moves state point)]
+  (let [moves (get-moves state point)
+        take-or-move
+        (fn [acc to]
+          (if (and (get-piece acc to)
+                   (not (same-colour? (get-piece acc to) (get-piece acc point))))
+            :take-piece
+            :marker))]
     (-> state
         (update
           :board
@@ -127,7 +134,7 @@
             (reduce (fn [acc to]
                       (assoc-in acc
                                 to
-                                {:piece :marker
+                                {:piece (take-or-move acc to)
                                  :colour :moves}))
                     board
                     moves)))
