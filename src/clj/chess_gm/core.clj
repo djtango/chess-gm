@@ -220,7 +220,7 @@
 
 (def white-knight-piece {:piece :knight
                          :colour :white
-                         :moves knight-moves})
+                         :moves (directions->moves knight-moves 1)})
 
 (def white-pawn-piece {:piece :pawn
                        :colour :white
