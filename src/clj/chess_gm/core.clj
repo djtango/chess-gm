@@ -119,27 +119,6 @@
          print-rows)
     (println linebr)))
 
-(defn see-available-moves [state point]
-  (let [moves (get-moves state point)
-        take-or-move
-        (fn [acc to]
-          (if (and (get-piece acc to)
-                   (not (same-colour? (get-piece acc to) (get-piece acc point))))
-            :take-piece
-            :marker))]
-    (-> state
-        (update
-          :board
-          (fn [board]
-            (reduce (fn [acc to]
-                      (assoc-in acc
-                                to
-                                {:piece (take-or-move acc to)
-                                 :colour :moves}))
-                    board
-                    moves)))
-        visualize-board)))
-
 (defn update-board [board point value]
   (assoc-in board point value))
 
@@ -480,3 +459,25 @@
               from
               to)
       :error)))
+
+(defn see-available-moves [state point]
+  (let [moves (get-moves state point)
+        take-or-move
+        (fn [acc to]
+          (if (and (get-piece acc to)
+                   (not (same-colour? (get-piece acc to) (get-piece acc point))))
+            :take-piece
+            :marker))]
+    (-> state
+        (update
+          :board
+          (fn [board]
+            (reduce (fn [acc to]
+                      (assoc-in acc
+                                to
+                                {:piece (take-or-move acc to)
+                                 :colour :moves}))
+                    board
+                    moves)))
+        visualize-board)))
+
