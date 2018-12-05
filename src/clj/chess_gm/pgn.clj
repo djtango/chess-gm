@@ -39,5 +39,9 @@
                                                     :capture ::capture)
                                  :?pawn-promotion (s/? ::pawn-promotion)
                                  :?check-or-checkmate (s/? ::check-or-checkmate))
-                    :castling ::castling))
+                    :castling ::castling
+                    :end (s/or :white-won    ::white-won
+                               :black-won    ::black-won
+                               :draw         ::draw
+                               :game-ongoing ::game-ongoing)))
 
