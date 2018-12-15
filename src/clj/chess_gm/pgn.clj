@@ -45,3 +45,13 @@
                                :draw         ::draw
                                :game-ongoing ::game-ongoing)))
 
+(s/def ::numstring (s/+ (set "1234567890")))
+(s/def ::round-number (s/cat :number ::numstring
+                             :fullstop #{\.}))
+(s/def ::whitespace (s/+ #{\ }))
+(s/def ::round (s/cat :r ::round-number
+                      :w ::whitespace
+                      :white-move ::move
+                      :w2 ::whitespace
+                      :black-move ::move
+                      :end (s/? ::whitespace)))
